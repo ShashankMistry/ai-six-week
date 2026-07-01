@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Six Weeks to AI — a flying classroom</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --bg:#070b16; --panel:#0d1322; --line:#1e2942; --ink:#e7ecf6; --dim:#8b98b8;
+    --amber:#ffc247; --cyan:#4fd8eb; --violet:#a78bfa; --emerald:#4ade9b; --rose:#fb7185; --gold:#ffd700;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  canvas{display:block}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* ---------- floating 3D labels ---------- */
+  #labels{position:fixed;inset:0;pointer-events:none;z-index:5}
+  .island-label{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;cursor:pointer;
+    background:rgba(13,19,34,.85);border:1px solid var(--line);border-radius:12px;padding:8px 14px;
+    text-align:center;transition:border-color .2s, opacity .3s;backdrop-filter:blur(4px);white-space:nowrap}
+  .island-label:hover{border-color:var(--amber)}
+  .island-label .wk{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .island-label .tt{font-size:13px;font-weight:600}
+  .island-label.locked{opacity:.45;cursor:not-allowed}
+  .island-label.done{border-color:var(--gold)}
+  .island-label.done .wk{color:var(--gold)}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;align-items:center;justify-content:space-between;
+    padding:14px 18px;pointer-events:none}
+  #hud .brand{display:flex;align-items:center;gap:10px;pointer-events:auto}
+  #hud .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--amber),#ff8c37);
+    display:flex;align-items:center;justify-content:center;font-size:17px}
+  #hud .name{font-weight:700;font-size:14px;letter-spacing:-.01em}
+  #hud .sub{font-size:10px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
+  #dots{display:flex;gap:6px;pointer-events:auto}
+  #dots .dot{width:26px;height:6px;border-radius:99px;background:var(--line);cursor:pointer;transition:background .3s}
+  #dots .dot.open{background:var(--amber)} #dots .dot.done{background:var(--gold)}
+
+  #hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:10;font-size:12px;color:var(--dim);
+    background:rgba(13,19,34,.7);border:1px solid var(--line);padding:8px 16px;border-radius:99px;backdrop-filter:blur(4px);
+    transition:opacity .4s}
+
+  #nav{position:fixed;bottom:18px;right:18px;z-index:10;display:flex;gap:8px}
+  #nav button{background:rgba(13,19,34,.85);border:1px solid var(--line);color:var(--ink);border-radius:10px;
+    padding:10px 14px;cursor:pointer;font-size:13px;backdrop-filter:blur(4px)}
+  #nav button:hover{border-color:var(--amber)}
+
+  /* ---------- start screen ---------- */
+  #start{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%, rgba(7,11,22,.4), rgba(7,11,22,.94));transition:opacity .8s}
+  #start.gone{opacity:0;pointer-events:none}
+  #start .card{max-width:560px;padding:36px;text-align:center}
+  #start .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);margin-bottom:14px}
+  #start h1{font-size:clamp(30px,6vw,46px);line-height:1.06;letter-spacing:-.03em;margin-bottom:16px;font-weight:800}
+  #start h1 em{font-style:normal;background:linear-gradient(90deg,var(--amber),var(--cyan));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  #start p{color:var(--dim);font-size:15px;line-height:1.65;margin-bottom:26px}
+  #start .go{background:linear-gradient(135deg,var(--amber),#ff9a3d);color:#151515;border:none;border-radius:14px;
+    padding:15px 34px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 8px 30px rgba(255,194,71,.25)}
+  #start .go:hover{transform:translateY(-2px)} 
+  #start .note{margin-top:16px;font-size:11px;color:#5a6residual}
+  #start .note{margin-top:16px;font-size:11px;color:#5a6683}
+
+  /* ---------- week panel ---------- */
+  #panel{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);z-index:20;background:var(--panel);
+    border-left:1px solid var(--line);transform:translateX(105%);transition:transform .45s cubic-bezier(.2,.9,.25,1);
+    display:flex;flex-direction:column}
+  #panel.open{transform:translateX(0)}
+  #panel header{padding:20px 24px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  #panel header .wk{font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:6px}
+  #panel header h2{font-size:21px;letter-spacing:-.02em;line-height:1.2}
+  #panel header .goal{font-size:13px;color:var(--dim);margin-top:6px;line-height:1.5}
+  #close{background:none;border:1px solid var(--line);color:var(--dim);border-radius:10px;width:34px;height:34px;
+    cursor:pointer;font-size:16px;flex-shrink:0}
+  #close:hover{color:var(--ink);border-color:var(--dim)}
+  #panel .body{flex:1;overflow-y:auto;padding:22px 24px 40px}
+
+  .sect{margin-bottom:30px}
+  .sect-label{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-bottom:12px;
+    display:flex;align-items:center;gap:8px}
+  .sect-label::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .concept{border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden}
+  .concept summary{padding:13px 16px;cursor:pointer;font-size:14px;font-weight:600;list-style:none;display:flex;gap:10px;align-items:center}
+  .concept summary::-webkit-details-marker{display:none}
+  .concept summary .n{font-size:11px;color:var(--amber)}
+  .concept .cbody{padding:0 16px 15px;font-size:13.5px;line-height:1.7;color:#c3cde2}
+  .concept .cbody b{color:var(--ink)}
+  .concept .cbody .aside{margin-top:10px;border-left:2px solid var(--cyan);padding:8px 12px;background:rgba(79,216,235,.06);
+    border-radius:0 8px 8px 0;font-size:12.5px;color:#a9d7e0}
+  .concept .cbody code{background:#070b16;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12px;color:var(--cyan)}
+  .concept .cbody pre{background:#070b16;border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px;
+    font-size:12px;color:var(--cyan);overflow-x:auto;line-height:1.6}
+
+  .video{display:flex;gap:13px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:12px 14px;
+    margin-bottom:9px;text-decoration:none;color:var(--ink);transition:border-color .2s}
+  .video:hover{border-color:var(--rose)}
+  .video .play{width:44px;height:32px;border-radius:8px;background:#e5314d;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;font-size:13px;color:#fff}
+  .video .vt{font-size:13.5px;font-weight:600;line-height:1.3}
+  .video .vm{font-size:11.5px;color:var(--dim);margin-top:2px}
+
+  .lab{border:1px solid var(--line);border-radius:16px;padding:16px;background:#0a0f1d}
+  .lab .lab-title{font-size:13px;font-weight:700;margin-bottom:4px}
+  .lab .lab-sub{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+
+  .hw{border:1px solid rgba(79,216,235,.35);border-radius:14px;padding:15px 16px;font-size:13.5px;line-height:1.65;color:#c3cde2;background:rgba(79,216,235,.04)}
+  .hw b{color:var(--cyan)}
+  .hw ul{margin:8px 0 0 18px} .hw li{margin-bottom:5px}
+  .hw a{color:var(--cyan)}
+
+  /* checks */
+  .check{border:1px solid var(--line);border-radius:14px;padding:15px 16px;margin-bottom:10px}
+  .check.passed{border-color:rgba(74,222,155,.5)}
+  .check .q{font-size:13.5px;line-height:1.55;margin-bottom:10px}
+  .check input[type=text]{width:100%;background:#070b16;border:1px solid var(--line);border-radius:10px;color:var(--ink);
+    padding:10px 12px;font-size:13px;outline:none;font-family:ui-monospace,Menlo,monospace}
+  .check input[type=text]:focus{border-color:var(--amber)}
+  .check .row{display:flex;gap:8px;margin-top:8px}
+  .check .opt{display:block;width:100%;text-align:left;background:none;border:1px solid var(--line);border-radius:10px;
+    color:#c3cde2;padding:10px 12px;font-size:13px;cursor:pointer;margin-bottom:7px}
+  .check .opt:hover{border-color:var(--dim)}
+  .check .opt.right{border-color:var(--emerald);color:var(--emerald)}
+  .check .opt.wrong{border-color:var(--rose);color:var(--rose)}
+  .btn{background:var(--amber);color:#151515;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:none;border:1px solid var(--line);color:var(--dim);font-weight:500}
+  .fb{font-size:12.5px;margin-top:9px;line-height:1.5}
+  .fb.bad{color:var(--rose)} .fb.good{color:var(--emerald)}
+
+  .week-done{border:1px solid var(--gold);border-radius:16px;padding:18px;text-align:center;background:rgba(255,215,0,.05)}
+  .week-done .big{font-size:16px;font-weight:800;color:var(--gold);margin-bottom:6px}
+  .week-done p{font-size:13px;color:var(--dim);margin-bottom:12px;line-height:1.5}
+
+  /* labs internals */
+  .slider-row{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px}
+  .slider-row label{width:86px;color:var(--dim)} .slider-row input{flex:1;accent-color:var(--amber)}
+  .slider-row .val{width:44px;text-align:right;color:var(--amber)}
+  .lab canvas{width:100%;border-radius:10px;background:#070b16;border:1px solid var(--line)}
+  .stat{display:flex;justify-content:space-between;font-size:12px;margin-top:8px}
+  .bar-row{display:flex;align-items:center;gap:9px;margin-bottom:7px;font-size:11.5px}
+  .bar-row .tok{width:70px;color:#c3cde2} .bar-row .pct{width:48px;text-align:right;color:var(--dim)}
+  .bar-track{flex:1;height:13px;background:#070b16;border-radius:6px;overflow:hidden}
+  .bar-fill{height:100%;background:#3a4763;border-radius:6px;transition:width .15s}
+  .bar-row.top .bar-fill{background:var(--amber)}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+  .chip{border:1px solid var(--line);border-radius:9px;background:none;color:#c3cde2;padding:8px 11px;font-size:12px;cursor:pointer}
+  .chip:hover{border-color:var(--amber)}
+  .seq{border:1px dashed var(--line);border-radius:10px;padding:8px;min-height:42px;margin-bottom:10px}
+  .seq .step{display:flex;gap:8px;background:#151d33;border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:5px}
+  .seq .step .i{color:var(--amber);font-size:11px}
+  .sort-item{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);
+    border-radius:10px;padding:9px 12px;margin-bottom:7px;font-size:12.5px}
+  .sort-item .btns{display:flex;gap:6px;flex-shrink:0}
+  .sort-item .sbtn{border:1px solid var(--line);background:none;color:var(--dim);border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer}
+  .sort-item .sbtn.sel{border-color:var(--amber);color:var(--amber)}
+  .sort-item.ok{border-color:rgba(74,222,155,.5)} .sort-item.bad{border-color:rgba(251,113,133,.6)}
+
+  #toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:40;background:#1a2137;border:1px solid var(--line);
+    color:var(--ink);padding:10px 18px;border-radius:12px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none}
+
+  @media (max-width:640px){
+    #panel{width:100%} .island-label .tt{font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+<div id="labels"></div>
+
+<div id="hud">
+  <div class="brand">
+    <div class="logo">🧠</div>
+    <div><div class="name">Six Weeks to AI</div><div class="sub">a flying classroom</div></div>
+  </div>
+  <div id="dots"></div>
+</div>
+
+<div id="hint">Click an island to open that week · drag to look around</div>
+
+<div id="nav">
+  <button id="prevBtn">← Prev</button>
+  <button id="nextBtn">Next →</button>
+</div>
+
+<div id="start">
+  <div class="card">
+    <div class="eyebrow">1.5 months · 6 islands · we study together</div>
+    <h1>Fly through the world of <em>AI</em>, one week at a time.</h1>
+    <p>Each island is one week of your training. Land on it and we go through the concepts together — with hand-picked videos,
+       interactive labs you can't break, and a check-in that lights the island gold and unlocks the next one.</p>
+    <button class="go" id="enterBtn">Begin Week 1 ✦</button>
+    <p class="note">Progress lives in this session — it resets on reload. Headphones optional, curiosity required.</p>
+  </div>
+</div>
+
+<aside id="panel">
+  <header>
+    <div>
+      <div class="wk" id="p-wk"></div>
+      <h2 id="p-title"></h2>
+      <div class="goal" id="p-goal"></div>
+    </div>
+    <button id="close">✕</button>
+  </header>
+  <div class="body" id="p-body"></div>
+</aside>
+
+<div id="toast"></div>
+
+<script>
+/* ================================================================
+   COURSE DATA — six weeks, studied together
+   ================================================================ */
+const yt = (id) => "https://www.youtube.com/watch?v=" + id;
+const ytSearch = (q) => "https://www.youtube.com/results?search_query=" + encodeURIComponent(q);
+
+const WEEKS = [
+{
+  key:"w1", color:0xffc247, css:"var(--amber)", theme:"terminal",
+  title:"Foundations — what AI really is",
+  goal:"By Sunday you'll explain AI vs ML vs deep learning without hand-waving, and have a working Python setup.",
+  concepts:[
+    {h:"AI is a family, not a thing", b:`<b>Artificial Intelligence</b> is any technique that makes machines seem smart — including 1980s if-else chess bots. The word tells you nothing about the method.<br><br>The split that matters: <b>rule-based systems</b> follow logic humans wrote. <b>Machine learning</b> systems discover their own logic from examples. Netflix doesn't have a rule saying "people who like Better Call Saul like Ozark" — it noticed.<div class="aside">Analogy: teaching someone to spot fake designer watches. Rules = hand them a 40-page checklist. ML = show them 10,000 real and fake watches and let them figure out what matters. The second expert is usually better — and can't fully explain how they know.</div>`},
+    {h:"The nesting dolls: AI ⊃ ML ⊃ DL ⊃ LLMs", b:`<b>Machine Learning</b>: learns from data. <b>Deep Learning</b>: ML using many-layered neural networks — powers vision, speech, and language. <b>LLMs</b> (GPT, Claude): deep learning applied to text at enormous scale.<br><br>When a 2026 job post says "AI developer," it means: <b>someone who builds products with ML models — usually LLMs</b>. Not someone writing if-else rules, and usually not someone inventing new math.`},
+    {h:"Your unfair advantage", b:`You already ship iOS apps. The rarest profile in this market isn't "knows ML theory" — it's <b>"product engineer who ships AI features."</b> This course turns you into that. Everything we learn points at two portfolio projects: a RAG app (week 5) and your Gujarati–Hindi–English code-switching detector (week 6).`},
+  ],
+  videos:[
+    {t:"Intro to Large Language Models — Andrej Karpathy", m:"1 hr · the single best orientation talk. Watch at 1.25x.", u:yt("zjkBMFhNj_g")},
+    {t:"But what is a neural network? — 3Blue1Brown", m:"19 min · the most beautiful explanation ever made", u:yt("aircAruvnKk")},
+  ],
+  lab:"sorter",
+  labTitle:"Lab · Rules or Learning?",
+  labSub:"For each system, decide: did a human write the logic, or was it learned from data? Get all six right.",
+  homework:`<b>Homework (≈3 hrs):</b><ul>
+    <li>Install Python 3 + <code>numpy</code>. Write a script that loads a list of 20 numbers and computes mean & max — first with a loop, then in one line with NumPy.</li>
+    <li>Watch both videos above. Write 5 sentences in your notes: "What I'd tell Atit about how ChatGPT works."</li>
+    <li>Create a GitHub repo called <b>ai-six-weeks</b>. Everything we build goes there. It becomes evidence.</li></ul>`,
+  checks:[
+    {type:"mcq", q:"Your bank flags fraud using a model trained on millions of past transactions. This is best described as…",
+     opts:["Rule-based AI","Machine learning","Not AI at all","A database query"], a:1,
+     ok:"Learned from examples → ML. You'll never confuse these in an interview now.",
+     hint:"Ask: did a human write the logic, or did the system find patterns in data?"},
+    {type:"text", q:"Fill the chain, smallest to biggest — LLMs ⊂ deep learning ⊂ ______ ⊂ AI. (One phrase.)",
+     accepted:["machine learning","ml"], ok:"AI ⊃ ML ⊃ DL ⊃ LLMs. The nesting dolls are yours.",
+     hint:"The layer where systems learn from data — but not necessarily with deep neural nets."},
+  ],
+},
+{
+  key:"w2", color:0x4fd8eb, css:"var(--cyan)", theme:"math",
+  title:"The math that earns its keep",
+  goal:"Vectors, dot products, and gradient descent — the 20% of math you'll use every single day.",
+  concepts:[
+    {h:"Vectors: lists of numbers with attitude", b:`A <b>vector</b> is just a list of numbers — [2, 3, 1] — treated as a point or direction in space. All of AI runs on them: an image becomes a vector of pixels, a word becomes a vector of meaning, your Instagram taste becomes a vector of preferences.<br><br>The most important operation in this entire field: the <b>dot product</b>.<pre>dot([2,3,1], [4,0,5]) = 2·4 + 3·0 + 1·5 = 13</pre>Multiply position-by-position, add it up. One number out. That number measures <b>alignment / similarity</b> — and it is the beating heart of search, recommendations, and attention.`},
+    {h:"Loss: a score for how wrong you are", b:`Every model's predictions are graded by a <b>loss function</b> — a single number, where lower = better. Mean Squared Error is the classic:<pre>MSE = average( (prediction − truth)² )</pre>Training a model means one thing only: <b>make the loss go down.</b> Everything else is machinery for doing that efficiently.`},
+    {h:"Gradient descent: rolling downhill", b:`Picture the loss as a landscape where your position = the model's parameters. The <b>gradient</b> tells you which way is uphill. So you step the opposite way:<pre>new_weight = old_weight − learning_rate × gradient</pre>The <b>learning rate</b> is the step size — and it's the dial you'll break most often in real life. Too small: training takes forever. Too big: you overshoot the valley and bounce around. You're about to feel this in your hands in the lab below.`},
+  ],
+  videos:[
+    {t:"Vectors — Essence of Linear Algebra — 3Blue1Brown", m:"10 min · watch chapters 1–3 of the series this week", u:yt("fNk_zzaMoSs")},
+    {t:"Gradient descent, how neural networks learn — 3Blue1Brown", m:"21 min · the landscape metaphor, animated perfectly", u:yt("IHZwWFHWa-w")},
+  ],
+  lab:"golf",
+  labTitle:"Lab · Gradient Descent Golf ⛳",
+  labSub:"The ball sits on a loss curve. Choose a learning rate, press Step to apply w ← w − lr·gradient. Sink the ball into the valley (|w| < 0.05) — then try lr = 1.1 and watch it explode. That explosion is a real bug you'll meet someday.",
+  homework:`<b>Homework (≈3 hrs):</b><ul>
+    <li>Watch 3Blue1Brown linear algebra chapters 1–3.</li>
+    <li>By hand: compute dot([1,2,3],[2,0,4]) and dot([1,0],[0,1]). Notice the second is 0 — perpendicular vectors have zero similarity. That's not a coincidence, it's the point.</li>
+    <li>In NumPy: <code>a @ b</code> for the same vectors. Push to your repo.</li></ul>`,
+  checks:[
+    {type:"num", q:"Compute dot([2, 3, 1], [4, 0, 5]). This exact operation runs trillions of times per second inside every AI datacenter.",
+     a:13, ok:"8 + 0 + 5 = 13. You now speak the native language of embeddings and attention.",
+     hint:"2·4 + 3·0 + 1·5, then sum."},
+    {type:"num", q:"One gradient descent step by hand: w = 5, gradient = 2, learning rate = 0.1. New w?",
+     a:4.8, ok:"5 − 0.2 = 4.8. This single line of arithmetic, repeated ~10¹⁵ times, trained the model you're going to build products with.",
+     hint:"w ← w − lr × gradient. Subtract, because gradient points uphill."},
+  ],
+},
+{
+  key:"w3", color:0xa78bfa, css:"var(--violet)", theme:"network",
+  title:"Neural networks, hands on",
+  goal:"Understand what a neuron computes, why layers stack, and train one yourself — then a real one in PyTorch.",
+  concepts:[
+    {h:"A neuron is 3 operations", b:`Weighted sum → add bias → activation:<pre>output = ReLU(w₁x₁ + w₂x₂ + b)
+ReLU(z) = max(0, z)   # negatives → 0</pre>That's the whole neuron. Not a brain cell — a tiny adjustable formula. A "network" is thousands of these wired in layers, and "training" tunes every w and b with week 2's gradient descent, all at once.`},
+    {h:"Why ReLU is non-negotiable", b:`Stack linear layers without an activation and the whole tower collapses into one linear layer — deep but dumb, only able to draw straight lines. The non-linearity (ReLU) is what unlocks curves, boundaries, faces, grammar.<div class="aside">Film-crew analogy: early layers are camera ops capturing raw edges, middle layers are editors assembling shapes, late layers are the director deciding "this is a cat." No single neuron understands anything; the intelligence lives in the stack.</div>`},
+    {h:"One training step, the sacred loop", b:`Every deep learning codebase — from a toy to GPT — beats to the same rhythm:<pre>1. forward pass   → predictions
+2. loss           → how wrong?
+3. backward pass  → gradient for every weight (backprop)
+4. optimizer step → nudge all weights downhill
+5. zero the grads → clean slate for next batch</pre>Backpropagation is just the chain rule from calculus, applied efficiently. You don't need to derive it — you need to know it computes step 3.`},
+  ],
+  videos:[
+    {t:"Backpropagation, intuitively — 3Blue1Brown", m:"13 min · what the backward pass actually does", u:yt("Ilg3gGewQ5U")},
+    {t:"Neural networks from scratch (micrograd) — Karpathy", m:"2.5 hrs · code along for the first hour minimum. Career-changing.", u:yt("VMj-3S1tku0")},
+  ],
+  lab:"neuron",
+  labTitle:"Lab · Train a neuron by hand",
+  labSub:"You are the optimizer. Drag weight and bias until the line fits the data and the loss drops below 0.050. Notice how the loss number guides your hands — gradient descent automates exactly that instinct.",
+  homework:`<b>Homework (≈5 hrs — the big one):</b><ul>
+    <li>Code along with the first hour of Karpathy's micrograd video. Type it yourself, don't copy-paste.</li>
+    <li>Follow PyTorch's official "Learn the Basics" tutorial and train a network on MNIST digits. Target: >95% test accuracy.</li>
+    <li>Push both to your repo with a short README: what the loss curve looked like, one thing that surprised you.</li></ul>`,
+  checks:[
+    {type:"num", q:"Trace a neuron: inputs x₁=2, x₂=1, weights w₁=3, w₂=−4, bias b=−1. Compute ReLU(w₁x₁ + w₂x₂ + b).",
+     a:1, ok:"6 − 4 − 1 = 1, ReLU passes positives through. If you can trace one neuron you can debug a million — it's the same op everywhere.",
+     hint:"Weighted sum first: 3·2 + (−4)·1 + (−1). Then max(0, result)."},
+    {type:"mcq", q:"Why can't a deep network made of ONLY linear layers (no ReLU) learn complex patterns?",
+     opts:["It trains too slowly","Stacked linear layers collapse into a single linear layer","It runs out of memory","It overfits immediately"], a:1,
+     ok:"Linear ∘ linear = linear. The activation is what buys depth its power — a favorite interview question.",
+     hint:"What is a linear function of a linear function?"},
+  ],
+},
+{
+  key:"w4", color:0x4ade9b, css:"var(--emerald)", theme:"transformer",
+  title:"Transformers & LLMs — the next-token machine",
+  goal:"Tokens, attention, temperature. After this week, ChatGPT stops being magic and starts being engineering.",
+  concepts:[
+    {h:"The entire secret: predict the next token", b:`Text is chopped into <b>tokens</b> (words or word-pieces: "unbelievable" → "un"+"believ"+"able"). An LLM is trained on one task only: <b>given all tokens so far, assign a probability to every possible next token.</b> Answering, coding, translating — all of it emerges from doing this absurdly well on most of the internet, then fine-tuning to be helpful.<div class="aside">Decoder ring: "hallucination" = the next-token machine confidently continuing a plausible-but-false pattern. "Context window" = how far back it can look. "Fine-tuning" = extra training to shape behavior.</div>`},
+    {h:"Attention: every token asks 'who's relevant to me?'", b:`Before predicting, each token compares itself to every previous token — <b>using dot products of their embedding vectors</b> (week 2 pays off). High score = pay attention. That's how the model links "it" to "the cat" ten words back.<br><br>Each token makes three vectors: <b>Query</b> (what I'm looking for), <b>Key</b> (what I offer to be found by), <b>Value</b> (what I pass along if chosen). Attention score = Query · Key. That's it. That's the mechanism inside the trillion-dollar architecture.`},
+    {h:"Temperature: the creativity dial", b:`The model outputs probabilities; <b>sampling</b> picks one token. <b>Temperature</b> reshapes the distribution first: low temp sharpens it (repeatable — use for code & data extraction), high temp flattens it (varied — use for brainstorming). You'll set this dial in nearly every API call you ever make. Feel it in the lab below.`},
+  ],
+  videos:[
+    {t:"But what is a GPT? — 3Blue1Brown", m:"27 min · transformers, visually. Then watch its attention sequel.", u:yt("wjZofJX0v4M")},
+    {t:"Attention in transformers — 3Blue1Brown", m:"26 min · Q, K, V finally click", u:yt("eMlx5fFNoYc")},
+    {t:"Let's build GPT from scratch — Karpathy", m:"2 hrs · this weekend's main event. Reproduce the first 40 min.", u:yt("kCc8FmEb1nY")},
+  ],
+  lab:"temp",
+  labTitle:"Lab · Temperature Lab 🌡",
+  labSub:"A real softmax distribution, live. Slide the temperature and watch probability mass move. Your mission: make the model deterministic — get 'Paris' above 99%.",
+  homework:`<b>Homework (≈5 hrs):</b><ul>
+    <li>Watch both 3Blue1Brown videos, then start Karpathy's "Let's build GPT" and reproduce at least the first 40 minutes of code.</li>
+    <li>Paste a paragraph into an online tokenizer (search "OpenAI tokenizer") — watch how words split. Try Gujarati and Hindi text too: notice they cost more tokens. That fact matters for your capstone.</li>
+    <li>Push your nanoGPT-following code to the repo.</li></ul>`,
+  checks:[
+    {type:"mcq", q:"What is a base LLM fundamentally trained to do?",
+     opts:["Retrieve facts from its database","Predict the next token given previous tokens","Translate between languages","Reason logically step by step"], a:1,
+     ok:"Next-token prediction at scale. Everything else — chat, code, reasoning — emerges on top. There is no database inside.",
+     hint:"It's the one task in the very first concept card."},
+    {type:"mcq", q:"In attention, the relevance score between two tokens is computed as…",
+     opts:["The sum of their embeddings","Query · Key (a dot product)","The distance between their positions in the sentence","A lookup in a similarity table"], a:1,
+     ok:"Q·K — week 2's dot product, promoted to the core of the transformer. You now understand the mechanism behind the model you're talking to.",
+     hint:"Which week-2 operation measures alignment between two vectors?"},
+  ],
+},
+{
+  key:"w5", color:0xfb7185, css:"var(--rose)", theme:"pipeline",
+  title:"LLM engineering — build your first real AI product",
+  goal:"APIs, prompting, and RAG. This week ends with portfolio project #1 actually existing.",
+  concepts:[
+    {h:"The job, honestly described", b:`An AI application engineer mostly does this: call a model API with a well-designed prompt, feed it the <b>right context</b>, constrain the output (JSON schemas, low temperature), and <b>measure quality with evals</b>. It's product engineering with a probabilistic component — which is why your iOS shipping experience transfers almost entirely.`},
+    {h:"RAG: the open-book exam", b:`An LLM's knowledge is frozen and it knows nothing about your private data. <b>Retrieval-Augmented Generation</b> fixes both — instead of hoping the model remembers, you look up relevant facts and paste them into the prompt.<pre># offline
+chunks  = split(documents)
+vectors = embed(chunks)        # week 2+4!
+store(vectors)
+
+# per question
+q       = embed(user_question) # same model!
+context = nearest(q, k=3)      # dot-product similarity
+answer  = llm(context + question)</pre><div class="aside">RAG = open-book exam. Fine-tuning = memorizing the book. Open-book is cheaper, updates instantly, and can cite sources — which is why industry reaches for RAG first.</div>`},
+    {h:"Evals: the habit that gets you hired", b:`Serious teams never trust a prompt change on vibes. They keep a set of test questions with expected answers and score every change against it. Even 15 hand-written test cases put you ahead of most candidates. <b>"How do you eval?" is a real interview question at AI companies</b> — and after this week you'll have a real answer.`},
+  ],
+  videos:[
+    {t:"Search: 'RAG explained simply'", m:"Pick a recent <15 min explainer — the pattern hasn't changed, the tools have", u:ytSearch("RAG retrieval augmented generation explained")},
+    {t:"Search: 'Claude API / OpenAI API python tutorial 2026'", m:"Any current quickstart; you just need your first successful API call", u:ytSearch("LLM API python tutorial beginners")},
+  ],
+  lab:"rag",
+  labTitle:"Lab · Assemble the RAG pipeline",
+  labSub:"Tap the five stages in the order they actually run. Get it right and you've designed the architecture behind most enterprise AI products shipping today.",
+  homework:`<b>Homework (≈6 hrs — portfolio project #1):</b><ul>
+    <li>Build a tiny RAG app in Python: take 10–15 of your own notes, chunk + embed them, retrieve top-3 by cosine similarity, answer questions with one LLM API call.</li>
+    <li>Write 10 eval questions with expected answers. Score your app. Report the number honestly in the README.</li>
+    <li>README format: problem → approach → demo → eval score → what fails and why. Push it. This repo is now interview material.</li></ul>`,
+  checks:[
+    {type:"mcq", q:"Your RAG app answers 'I don't have information about that' for a fact that IS in your documents. The most likely culprit?",
+     opts:["The LLM's temperature is too low","Retrieval failed — the relevant chunk wasn't found or ranked high enough","The model is too small","You need to fine-tune"], a:1,
+     ok:"In RAG debugging, retrieval is guilty until proven innocent. Always inspect what chunks were retrieved before blaming the model.",
+     hint:"The model can only answer from the context it was handed. Who hands it the context?"},
+    {type:"text", q:"Your app must return the same JSON structure every single time. Besides prompting for JSON, which sampling parameter do you set low?",
+     accepted:["temperature","the temperature","temp"], ok:"Low temperature → near-deterministic outputs. You felt why in week 4's lab.",
+     hint:"The creativity dial from last week."},
+  ],
+},
+{
+  key:"w6", color:0xffd700, css:"var(--gold)", theme:"rocket",
+  title:"Capstone & career — ship it and say it",
+  goal:"Your code-switching detector gets a real plan, your GitHub becomes a portfolio, and you learn to talk about all of it.",
+  concepts:[
+    {h:"The capstone: your code-switching detector", b:`Everything converges here. Detecting real-time switches between Gujarati, Hindi, and English is — at its core — an <b>embeddings project</b> (week 2 + 4):<pre>1. audio → text segments      (Whisper)
+2. each segment → embedding   (multilingual model)
+3. classify segment language  (fasttext or embedding
+                               nearest-centroid)
+4. a SWITCH = a jump between
+   language regions in the space
+5. wrap it in a clean demo    (CLI or simple web UI)</pre>Ten days of evenings. It's specific, personal, multilingual, and audio-first — exactly the kind of project that makes a hiring manager stop scrolling.`},
+    {h:"Positioning: say the true thing confidently", b:`Your line is not "I took a course." It's: <b>"I'm a mobile engineer who ships LLM-powered features — here are two working projects with evals."</b><br><br>Target roles, nearest first: AI-adjacent work inside IBM Consulting (volunteer for GenAI client projects — lowest-friction move available to you) → AI Application Engineer at product companies → and treat OpenAI/Anthropic as a 2–3 year target reached through proven work, which is how most people there actually arrived.`},
+    {h:"The interview reality", b:`For application-engineer roles they probe three things: <b>your projects</b> (deepest questions go here — another reason to build honestly), <b>fundamentals</b> (every check-in you passed on these islands), and <b>judgment</b> ("how would you reduce hallucinations?" — you now know: retrieval grounding + low temperature + evals). Explain simply; simple explanations are the proof you understand.`},
+  ],
+  videos:[
+    {t:"State of GPT — Karpathy", m:"43 min · how models are actually built & used in industry; superb interview prep", u:yt("bZQun8Y4L2A")},
+    {t:"Search: 'Whisper speech to text python tutorial'", m:"Step 1 of your capstone — get transcription running in an evening", u:ytSearch("openai whisper python tutorial")},
+  ],
+  lab:"boss",
+  labTitle:"Final Boss · The interview room",
+  labSub:"Three questions, the kind that actually get asked. Pass all three to graduate.",
+  homework:`<b>Homework (the rest of your 1.5 months):</b><ul>
+    <li>Days 1–10: build the code-switching detector following the plan above. Ship a demo video.</li>
+    <li>Polish both READMEs. Pin both repos. Update LinkedIn headline: "iOS Engineer · building with LLMs".</li>
+    <li>Apply to 5 roles that mention LLMs/GenAI — including internal IBM opportunities. Momentum beats perfection.</li></ul>`,
+  checks:[
+    {type:"mcq", q:"Interviewer: 'Explain attention to a smart non-technical person.' Your best answer:",
+     opts:["It's scaled dot-product similarity followed by a softmax over the key dimension","Each word looks at all the other words and decides which ones matter for understanding it — like highlighting the relevant parts of a sentence","It's too complex to explain simply","It's basically a database lookup"], a:1,
+     ok:"Simple, true, vivid. The jargon version is what you say when they ask the follow-up — and now you can do both.",
+     hint:"They asked for a non-technical person. Which answer respects that?"},
+    {type:"mcq", q:"'Our LLM feature sometimes invents facts. What do you do?' The strongest answer combines:",
+     opts:["Bigger model + longer prompt","Retrieval grounding (RAG) + low temperature + evals that check answers against sources","Ask the model to promise honesty","Turn the feature off"], a:1,
+     ok:"Ground it, calm it, measure it. You've personally built or simulated all three pieces in this course.",
+     hint:"Weeks 4 and 5 each contributed one piece."},
+    {type:"text", q:"Complete your positioning line: 'I'm a mobile engineer who ships ______-powered features.' (3 letters)",
+     accepted:["llm","llms"], ok:"That's the sentence. Now go make it undeniable. 🎓",
+     hint:"The acronym this whole course orbits."},
+  ],
+},
+];
+
+/* ================================================================
+   STATE
+   ================================================================ */
+const state = {
+  entered:false,
+  current:-1,          // island in focus
+  open:-1,             // panel open for week index
+  done:WEEKS.map(()=>false),
+  checks:WEEKS.map(w=>w.checks.map(()=>false)),
+  labPassed:WEEKS.map(()=>false),
+  flying:false,
+};
+const unlocked = (i)=> i===0 || state.done[i-1];
+
+/* ================================================================
+   THREE.JS WORLD
+   ================================================================ */
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x070b16, 22, 60);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, .1, 200);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setClearColor(0x070b16);
+document.body.prepend(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x8899cc,.55));
+const sun = new THREE.DirectionalLight(0xfff2dd,.9); sun.position.set(6,12,8); scene.add(sun);
+const rim = new THREE.DirectionalLight(0x4fd8eb,.35); rim.position.set(-8,4,-6); scene.add(rim);
+
+/* stars */
+{
+  const n=900, pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    pos[i*3]=(Math.random()-.5)*160; pos[i*3+1]=(Math.random()-.5)*90; pos[i*3+2]=(Math.random()-.5)*160;
+  }
+  const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x9db3e8,size:.14,transparent:true,opacity:.8})));
+}
+
+/* island positions along a gentle S-path */
+const ISLAND_POS = WEEKS.map((_,i)=>{
+  const z = -i*16;
+  const x = Math.sin(i*1.15)*9;
+  const y = Math.sin(i*.8)*2.2;
+  return new THREE.Vector3(x,y,z);
+});
+
+/* glowing path between islands */
+{
+  const curvePts=[];
+  for(let i=0;i<ISLAND_POS.length-1;i++){
+    const a=ISLAND_POS[i], b=ISLAND_POS[i+1];
+    for(let t=0;t<=1;t+=.08){
+      const p=new THREE.Vector3().lerpVectors(a,b,t);
+      p.y+=Math.sin(t*Math.PI)*1.6-0.6;
+      curvePts.push(p);
+    }
+  }
+  const g=new THREE.BufferGeometry().setFromPoints(curvePts);
+  scene.add(new THREE.Line(g,new THREE.LineBasicMaterial({color:0x2b3a63,transparent:true,opacity:.8})));
+}
+
+/* island builder */
+const islands=[], clickables=[];
+function mat(c,extra={}){return new THREE.MeshStandardMaterial(Object.assign({color:c,flatShading:true,roughness:.8},extra));}
+
+function buildIsland(i){
+  const w=WEEKS[i];
+  const g=new THREE.Group();
+  g.position.copy(ISLAND_POS[i]);
+
+  // rock base (inverted cone) + grass disc
+  const rock=new THREE.Mesh(new THREE.ConeGeometry(3,4.4,7), mat(0x2a3352)); rock.rotation.x=Math.PI; rock.position.y=-2.2; g.add(rock);
+  const top=new THREE.Mesh(new THREE.CylinderGeometry(3,3.15,.7,9), mat(0x35406b)); g.add(top);
+  const cap=new THREE.Mesh(new THREE.CylinderGeometry(2.95,3,.16,9), mat(w.color,{emissive:w.color,emissiveIntensity:.12})); cap.position.y=.42; g.add(cap);
+
+  // little floating rocks
+  for(let k=0;k<3;k++){
+    const r=new THREE.Mesh(new THREE.IcosahedronGeometry(.28+Math.random()*.2,0), mat(0x2a3352));
+    r.position.set((Math.random()-.5)*7,(Math.random()-.5)*3-1.5,(Math.random()-.5)*7);
+    r.userData.float={o:Math.random()*6,s:.4+Math.random()*.4};
+    g.add(r);
+  }
+
+  // theme decoration
+  const deco=new THREE.Group(); deco.position.y=.5; g.add(deco);
+  const M=(c)=>mat(c,{emissive:c,emissiveIntensity:.25});
+  if(w.theme==="terminal"){
+    const scr=new THREE.Mesh(new THREE.BoxGeometry(2.2,1.5,.18), M(0x0d1322)); scr.position.y=1.5; deco.add(scr);
+    const glow=new THREE.Mesh(new THREE.BoxGeometry(1.9,1.2,.05), M(w.color)); glow.position.set(0,1.5,.12); deco.add(glow);
+    const stand=new THREE.Mesh(new THREE.CylinderGeometry(.12,.3,.8,6), mat(0x2a3352)); stand.position.y=.5; deco.add(stand);
+  } else if(w.theme==="math"){
+    const t=new THREE.Mesh(new THREE.TorusGeometry(1,.28,10,24), M(w.color)); t.position.y=1.8; t.userData.spin=.5; deco.add(t);
+    const s=new THREE.Mesh(new THREE.SphereGeometry(.32,10,10), M(0xffffff)); s.position.set(1.6,1.4,0); s.userData.orbit={r:1.55,y:1.8,s:1.1}; deco.add(s);
+  } else if(w.theme==="network"){
+    const cols=[[-1,0,1],[-.6,.6],[0]];
+    const nodes=[];
+    cols.forEach((ys,ci)=>ys.forEach(y=>{
+      const n=new THREE.Mesh(new THREE.SphereGeometry(.22,10,10), M(w.color));
+      n.position.set((ci-1)*1.2, 1.5+y, 0); deco.add(n); nodes.push({m:n,c:ci});
+    }));
+    const pts=[];
+    nodes.forEach(a=>nodes.forEach(b=>{ if(b.c===a.c+1){pts.push(a.m.position.clone(),b.m.position.clone());}}));
+    const lg=new THREE.BufferGeometry().setFromPoints(pts);
+    deco.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x8ea2d8,transparent:true,opacity:.6})));
+  } else if(w.theme==="transformer"){
+    [0,1,2].forEach(k=>{
+      const b=new THREE.Mesh(new THREE.BoxGeometry(1.7-.3*k,.5,1.7-.3*k), M(w.color));
+      b.position.y=.9+k*.62; b.rotation.y=k*.35; b.userData.spin=.15*(k%2?1:-1); deco.add(b);
+    });
+  } else if(w.theme==="pipeline"){
+    [-1.4,0,1.4].forEach((x,k)=>{
+      const c=new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,.9,8), M(w.color)); c.position.set(x,1.2+((k%2)?.5:0),0); deco.add(c);
+    });
+    const flow=new THREE.Mesh(new THREE.SphereGeometry(.14,8,8), M(0xffffff)); flow.userData.pipe=true; deco.add(flow);
+  } else if(w.theme==="rocket"){
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(.42,.5,1.6,8), mat(0xe8ecf7)); body.position.y=1.6; deco.add(body);
+    const nose=new THREE.Mesh(new THREE.ConeGeometry(.42,.8,8), M(w.color)); nose.position.y=2.8; deco.add(nose);
+    const fl=new THREE.Mesh(new THREE.ConeGeometry(.3,.7,8), M(0xff8c37)); fl.rotation.x=Math.PI; fl.position.y=.55; fl.userData.flame=true; deco.add(fl);
+    deco.userData.hover=true;
+  }
+
+  // lock ring shown until unlocked / gold ring when done
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(3.5,.06,8,40), mat(0x394463,{emissive:0x394463,emissiveIntensity:.3}));
+  ring.rotation.x=Math.PI/2; ring.position.y=.4; g.add(ring);
+
+  g.userData={index:i, ring, deco};
+  scene.add(g);
+  islands.push(g);
+  clickables.push(top, cap, rock);
+  top.userData.index=cap.userData.index=rock.userData.index=i;
+}
+WEEKS.forEach((_,i)=>buildIsland(i));
+
+function refreshIslandLooks(){
+  islands.forEach((g,i)=>{
+    const un=unlocked(i), dn=state.done[i];
+    g.userData.ring.material.color.set(dn?0xffd700: un?WEEKS[i].color:0x394463);
+    g.userData.ring.material.emissive.set(dn?0xffd700: un?WEEKS[i].color:0x394463);
+    g.userData.ring.material.emissiveIntensity = dn?.7: un?.35:.15;
+    g.userData.deco.traverse(o=>{
+      if(o.material&&o.material.emissive!==undefined&&o.material.emissiveIntensity>0){
+        o.material.opacity=1;
+      }
+    });
+    g.userData.deco.visible=true;
+    g.traverse(o=>{ if(o.material){o.material.transparent=!un&&!dn; o.material.opacity=un||dn?1:.45;} });
+  });
+}
+
+/* ---------- labels ---------- */
+const labelsEl=document.getElementById("labels");
+const labelDivs=WEEKS.map((w,i)=>{
+  const d=document.createElement("div");
+  d.className="island-label";
+  d.innerHTML=`<div class="wk" style="color:${w.css}">Week ${i+1}</div><div class="tt">${w.title.split("—")[0].trim()}</div>`;
+  d.onclick=()=>tryVisit(i);
+  labelsEl.appendChild(d);
+  return d;
+});
+function refreshLabels(){
+  labelDivs.forEach((d,i)=>{
+    d.classList.toggle("locked",!unlocked(i));
+    d.classList.toggle("done",state.done[i]);
+  });
+}
+
+/* ---------- camera ---------- */
+const camState={pos:new THREE.Vector3(14,8,26), look:new THREE.Vector3(0,0,-8),
+  toPos:new THREE.Vector3(), toLook:new THREE.Vector3(), t:1, dur:1.6, fromPos:new THREE.Vector3(), fromLook:new THREE.Vector3()};
+camera.position.copy(camState.pos);
+
+function camTargetFor(i){
+  const p=ISLAND_POS[i];
+  return {pos:new THREE.Vector3(p.x+ (p.x>0?-5:5), p.y+3.4, p.z+9.5), look:new THREE.Vector3(p.x,p.y+1,p.z)};
+}
+function flyTo(i,then){
+  const t=camTargetFor(i);
+  camState.fromPos.copy(camState.pos); camState.fromLook.copy(camState.look);
+  camState.toPos.copy(t.pos); camState.toLook.copy(t.look);
+  camState.t=0; state.flying=true; state.current=i;
+  camState.onArrive=then;
+}
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+
+/* subtle mouse-drag orbit offset */
+let dragging=false,px=0,py=0,offX=0,offY=0;
+addEventListener("pointerdown",e=>{dragging=true;px=e.clientX;py=e.clientY;});
+addEventListener("pointerup",()=>dragging=false);
+addEventListener("pointermove",e=>{
+  if(!dragging||state.open>=0)return;
+  offX+= (e.clientX-px)*.004; offY+=(e.clientY-py)*.003;
+  offX=Math.max(-.8,Math.min(.8,offX)); offY=Math.max(-.5,Math.min(.5,offY));
+  px=e.clientX;py=e.clientY;
+});
+
+/* raycast island clicks */
+const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+let downAt=[0,0];
+renderer.domElement.addEventListener("pointerdown",e=>{downAt=[e.clientX,e.clientY];});
+renderer.domElement.addEventListener("pointerup",e=>{
+  if(Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1])>6)return; // was a drag
+  mouse.x=(e.clientX/innerWidth)*2-1; mouse.y=-(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hit=ray.intersectObjects(clickables)[0];
+  if(hit)tryVisit(hit.object.userData.index);
+});
+
+function tryVisit(i){
+  if(!state.entered)return;
+  if(!unlocked(i)){toast(`Finish week ${i} to unlock this island 🔒`);return;}
+  closePanel();
+  flyTo(i,()=>openPanel(i));
+}
+
+/* ---------- animate ---------- */
+const v1=new THREE.Vector3();
+function animate(t){
+  requestAnimationFrame(animate);
+  const time=t*.001;
+
+  islands.forEach((g,i)=>{
+    g.position.y=ISLAND_POS[i].y+Math.sin(time*.6+i*1.7)*.35;
+    g.rotation.y=Math.sin(time*.15+i)*.06;
+    g.userData.ring.rotation.z=time*.3;
+    g.traverse(o=>{
+      const u=o.userData;
+      if(u.float)o.position.y+=Math.sin(time*u.float.s+u.float.o)*.004;
+      if(u.spin)o.rotation.y+=u.spin*.016;
+      if(u.orbit){o.position.x=Math.cos(time*u.orbit.s)*u.orbit.r;o.position.z=Math.sin(time*u.orbit.s)*u.orbit.r;o.position.y=u.orbit.y+Math.sin(time*2)*.1;}
+      if(u.pipe){const c=(time*.5)%1;o.position.x=-1.4+c*2.8;o.position.y=1.2+Math.sin(c*Math.PI*2)*.5;}
+      if(u.flame)o.scale.setScalar(1+Math.sin(time*14)*.18);
+    });
+    if(g.userData.deco.userData.hover)g.userData.deco.position.y=.5+Math.sin(time*1.4)*.15;
+  });
+
+  // camera
+  if(camState.t<1){
+    camState.t=Math.min(1,camState.t+.016/camState.dur);
+    const k=ease(camState.t);
+    camState.pos.lerpVectors(camState.fromPos,camState.toPos,k);
+    camState.look.lerpVectors(camState.fromLook,camState.toLook,k);
+    if(camState.t>=1){state.flying=false; if(camState.onArrive){const f=camState.onArrive;camState.onArrive=null;f();}}
+  }
+  const wob=state.open>=0?0:1;
+  camera.position.set(
+    camState.pos.x+Math.sin(time*.4)*.25*wob + offX*3,
+    camState.pos.y+Math.sin(time*.6)*.18*wob + -offY*2,
+    camState.pos.z
+  );
+  v1.copy(camState.look);
+  camera.lookAt(v1);
+
+  // labels
+  labelDivs.forEach((d,i)=>{
+    v1.copy(islands[i].position); v1.y+=3.4;
+    const sp=v1.project(camera);
+    const vis=sp.z<1;
+    d.style.display=vis?"block":"none";
+    if(vis){
+      d.style.left=((sp.x*.5+.5)*innerWidth)+"px";
+      d.style.top =((-sp.y*.5+.5)*innerHeight)+"px";
+      const dist=camera.position.distanceTo(islands[i].position);
+      d.style.opacity=Math.max(.25,Math.min(1, 2.2 - dist/22));
+    }
+  });
+
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(animate);
+
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+/* ================================================================
+   UI — panel, dots, toast
+   ================================================================ */
+const $=s=>document.querySelector(s);
+const dotsEl=$("#dots");
+WEEKS.forEach((w,i)=>{
+  const d=document.createElement("div"); d.className="dot"; d.title="Week "+(i+1);
+  d.onclick=()=>tryVisit(i); dotsEl.appendChild(d);
+});
+function refreshDots(){
+  [...dotsEl.children].forEach((d,i)=>{
+    d.classList.toggle("done",state.done[i]);
+    d.classList.toggle("open",!state.done[i]&&unlocked(i));
+  });
+}
+
+let toastT;
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.style.opacity=1;
+  clearTimeout(toastT); toastT=setTimeout(()=>t.style.opacity=0,2400);
+}
+
+$("#enterBtn").onclick=()=>{
+  $("#start").classList.add("gone");
+  state.entered=true;
+  flyTo(0,()=>openPanel(0));
+};
+$("#close").onclick=closePanel;
+$("#prevBtn").onclick=()=>{const i=Math.max(0,(state.current<0?0:state.current)-1); tryVisit(i);};
+$("#nextBtn").onclick=()=>{const i=Math.min(WEEKS.length-1,(state.current<0?-1:state.current)+1); tryVisit(i);};
+
+function closePanel(){ $("#panel").classList.remove("open"); state.open=-1; }
+
+function openPanel(i){
+  state.open=i;
+  const w=WEEKS[i];
+  $("#p-wk").textContent=`Week ${i+1} of 6 · island ${i+1}`;
+  $("#p-wk").style.color=w.css;
+  $("#p-title").textContent=w.title;
+  $("#p-goal").textContent=w.goal;
+
+  const body=$("#p-body"); body.innerHTML="";
+
+  // concepts
+  body.appendChild(sect("📖 We study together", w.concepts.map((c,ci)=>`
+    <details class="concept" ${ci===0?"open":""}>
+      <summary><span class="n">${String(ci+1).padStart(2,"0")}</span>${c.h}</summary>
+      <div class="cbody">${c.b}</div>
+    </details>`).join("")));
+
+  // videos
+  body.appendChild(sect("▶ Watch this week", w.videos.map(v=>`
+    <a class="video" href="${v.u}" target="_blank" rel="noopener">
+      <div class="play">▶</div>
+      <div><div class="vt">${v.t}</div><div class="vm">${v.m}</div></div>
+    </a>`).join("")));
+
+  // lab
+  const labWrap=sect("🧪 Interactive lab","");
+  const lab=document.createElement("div"); lab.className="lab";
+  lab.innerHTML=`<div class="lab-title">${w.labTitle}</div><div class="lab-sub">${w.labSub}</div><div class="lab-mount"></div>`;
+  labWrap.appendChild(lab);
+  body.appendChild(labWrap);
+  LABS[w.lab](lab.querySelector(".lab-mount"), i);
+
+  // homework
+  body.appendChild(sect("🏠 Real-world homework", `<div class="hw">${w.homework}</div>`));
+
+  // checks
+  const cw=sect("🎯 Check-in — passes light the island gold","");
+  w.checks.forEach((c,ci)=>cw.appendChild(renderCheck(i,ci,c)));
+  body.appendChild(cw);
+
+  // done banner
+  if(state.done[i]) body.appendChild(doneBanner(i));
+
+  $("#panel").classList.add("open");
+  refreshAll();
+}
+
+function sect(label, html){
+  const d=document.createElement("div"); d.className="sect";
+  d.innerHTML=`<div class="sect-label">${label}</div>${html}`;
+  return d;
+}
+
+function doneBanner(i){
+  const d=document.createElement("div"); d.className="week-done";
+  const last=i===WEEKS.length-1;
+  d.innerHTML=`<div class="big">${last?"🎓 Course complete — you did the whole flight.":"✦ Week "+(i+1)+" complete!"}</div>
+    <p>${last?"Six islands, six weeks, two portfolio projects planned. The next island is a job application.":"The island is gold and week "+(i+2)+" just unlocked."}</p>`;
+  if(!last){
+    const b=document.createElement("button"); b.className="btn"; b.textContent="Fly to week "+(i+2)+" →";
+    b.onclick=()=>tryVisit(i+1); d.appendChild(b);
+  }
+  return d;
+}
+
+/* ---------- check rendering & validation ---------- */
+const normTxt=s=>String(s).trim().toLowerCase().replace(/\s+/g," ");
+function renderCheck(wi,ci,c){
+  const passed=state.checks[wi][ci];
+  const d=document.createElement("div"); d.className="check"+(passed?" passed":"");
+  d.innerHTML=`<div class="q"><b style="color:var(--amber)">Q${ci+1}.</b> ${c.q}</div>`;
+  const fb=document.createElement("div");
+
+  const win=()=>{
+    state.checks[wi][ci]=true;
+    d.classList.add("passed");
+    fb.className="fb good"; fb.textContent="✓ "+c.ok;
+    maybeCompleteWeek(wi);
+  };
+
+  if(c.type==="mcq"){
+    c.opts.forEach((o,oi)=>{
+      const b=document.createElement("button"); b.className="opt"; b.textContent=String.fromCharCode(65+oi)+".  "+o;
+      if(passed&&oi===c.a)b.classList.add("right");
+      b.disabled=passed;
+      b.onclick=()=>{
+        [...d.querySelectorAll(".opt")].forEach(x=>x.classList.remove("wrong"));
+        if(oi===c.a){b.classList.add("right");[...d.querySelectorAll(".opt")].forEach(x=>x.disabled=true);win();}
+        else{b.classList.add("wrong");fb.className="fb bad";fb.textContent="✗ "+c.hint;}
+      };
+      d.appendChild(b);
+    });
+  } else {
+    const row=document.createElement("div"); row.className="row";
+    const inp=document.createElement("input"); inp.type="text"; inp.placeholder=c.type==="num"?"number":"your answer";
+    inp.disabled=passed;
+    const btn=document.createElement("button"); btn.className="btn"; btn.textContent="Check"; btn.disabled=passed;
+    const go=()=>{
+      let ok=false;
+      if(c.type==="num"){const n=parseFloat(inp.value);ok=!isNaN(n)&&Math.abs(n-c.a)<=(c.tol??.001);}
+      else ok=c.accepted.map(normTxt).includes(normTxt(inp.value));
+      if(ok){inp.disabled=btn.disabled=true;win();}
+      else{fb.className="fb bad";fb.textContent="✗ "+c.hint;}
+    };
+    btn.onclick=go; inp.onkeydown=e=>{if(e.key==="Enter")go();};
+    row.appendChild(inp);row.appendChild(btn);d.appendChild(row);
+  }
+  if(passed){fb.className="fb good";fb.textContent="✓ "+c.ok;}
+  d.appendChild(fb);
+  return d;
+}
+
+function maybeCompleteWeek(wi){
+  if(state.done[wi])return;
+  if(state.checks[wi].every(Boolean)){
+    state.done[wi]=true;
+    toast(`✦ Week ${wi+1} complete — island turned gold!`);
+    refreshAll();
+    const body=$("#p-body");
+    if(state.open===wi){body.appendChild(doneBanner(wi));body.lastChild.scrollIntoView({behavior:"smooth"});}
+  }
+}
+
+function refreshAll(){refreshDots();refreshLabels();refreshIslandLooks();}
+refreshAll();
+
+/* ================================================================
+   LABS — interactive teaching demos (vanilla JS)
+   ================================================================ */
+const LABS={};
+
+/* Week 1: rules vs learning sorter */
+LABS.sorter=(mount,wi)=>{
+  const items=[
+    ["Thermostat: heat on below 20°C",0],["Spam filter trained on a million emails",1],
+    ["Netflix recommendations from watch history",1],["Tax software applying bracket formulas",0],
+    ["Face unlock on your phone",1],["Traffic light on a fixed timer",0],
+  ];
+  const sel=items.map(()=>null);
+  const wrap=document.createElement("div");
+  items.forEach(([txt],i)=>{
+    const r=document.createElement("div"); r.className="sort-item";
+    r.innerHTML=`<span>${txt}</span>`;
+    const btns=document.createElement("div"); btns.className="btns";
+    ["Rules","Learned"].forEach((lab,b)=>{
+      const bt=document.createElement("button"); bt.className="sbtn"; bt.textContent=lab;
+      bt.onclick=()=>{sel[i]=b;[...btns.children].forEach((x,xi)=>x.classList.toggle("sel",xi===b));r.classList.remove("ok","bad");};
+      btns.appendChild(bt);
+    });
+    r.appendChild(btns); wrap.appendChild(r);
+  });
+  const chk=document.createElement("button"); chk.className="btn"; chk.textContent="Check all six";
+  const fb=document.createElement("div");
+  chk.onclick=()=>{
+    if(sel.some(s=>s===null)){fb.className="fb bad";fb.textContent="✗ Decide every row first.";return;}
+    let all=true;
+    [...wrap.children].forEach((r,i)=>{const ok=sel[i]===items[i][1];r.classList.toggle("ok",ok);r.classList.toggle("bad",!ok);if(!ok)all=false;});
+    if(all){fb.className="fb good";fb.textContent="✓ Perfect. The tell: behavior from examples that improves with data = learned.";state.labPassed[wi]=true;}
+    else{fb.className="fb bad";fb.textContent="✗ Red rows are misfiled. Ask: could a human print this logic on paper?";}
+  };
+  mount.appendChild(wrap);mount.appendChild(chk);mount.appendChild(fb);
+};
+
+/* Week 2: gradient descent golf */
+LABS.golf=(mount,wi)=>{
+  mount.innerHTML=`<canvas width="480" height="220"></canvas>
+    <div class="slider-row"><label>learning rate</label><input type="range" min="0.02" max="1.15" step="0.01" value="0.15"><span class="val">0.15</span></div>
+    <div class="row" style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn">Step ⛳</button><button class="btn ghost">Reset ball</button>
+    </div><div class="stat"><span class="mono" id="gw"></span><span class="mono" id="gl"></span></div><div class="fb"></div>`;
+  const cv=mount.querySelector("canvas"),ctx=cv.getContext("2d");
+  const [slider]=mount.querySelectorAll("input"); const val=mount.querySelector(".val");
+  const [stepB,resetB]=mount.querySelectorAll("button");
+  const fb=mount.querySelector(".fb"), gw=mount.querySelector("#gw"), gl=mount.querySelector("#gl");
+  let w=2.2, trail=[];
+  const X=x=>240+x*85, Y=y=>195-y*30;
+  function draw(){
+    ctx.clearRect(0,0,480,220);
+    ctx.strokeStyle="#22304f";ctx.beginPath();
+    for(let x=-2.6;x<=2.6;x+=.05){const p=[X(x),Y(x*x)];x===-2.6?ctx.moveTo(...p):ctx.lineTo(...p);}
+    ctx.stroke();
+    ctx.fillStyle="#4ade9b";ctx.beginPath();ctx.arc(X(0),Y(0),4,0,7);ctx.fill();
+    ctx.fillStyle="#8b98b8";ctx.font="10px monospace";ctx.fillText("goal",X(0)-11,Y(0)+16);
+    trail.forEach((tx,i)=>{ctx.fillStyle=`rgba(255,194,71,${.15+.5*i/trail.length})`;ctx.beginPath();ctx.arc(X(tx),Y(tx*tx),3,0,7);ctx.fill();});
+    ctx.fillStyle="#ffc247";ctx.beginPath();ctx.arc(X(w),Y(w*w),7,0,7);ctx.fill();
+    gw.textContent="w = "+w.toFixed(3); gl.textContent="loss = "+(w*w).toFixed(3);
+    gl.style.color=Math.abs(w)<.05?"var(--emerald)":"var(--rose)";
+  }
+  slider.oninput=()=>val.textContent=(+slider.value).toFixed(2);
+  stepB.onclick=()=>{
+    trail.push(w); if(trail.length>14)trail.shift();
+    w=w-(+slider.value)*(2*w);            // gradient of w² is 2w
+    if(Math.abs(w)>3.1){fb.className="fb bad";fb.textContent="💥 Diverged! Learning rate too high — the step overshot the valley and bounced out. Reset & go smaller.";w=2.2;trail=[];}
+    else if(Math.abs(w)<.05){fb.className="fb good";fb.textContent="⛳ Sunk it! You just did gradient descent by hand. Now try lr ≈ 1.05 to feel the oscillation.";state.labPassed[wi]=true;}
+    else fb.textContent="";
+    draw();
+  };
+  resetB.onclick=()=>{w=2.2;trail=[];fb.textContent="";draw();};
+  draw();
+};
+
+/* Week 3: neuron trainer */
+LABS.neuron=(mount,wi)=>{
+  const PTS=[[-1.5,-1.9],[-1,-1.1],[-.5,.1],[0,.9],[.5,2.1],[1,2.9],[1.5,4.1],[2,5]];
+  mount.innerHTML=`<canvas width="480" height="230"></canvas>
+    <div class="slider-row"><label>weight w</label><input type="range" min="-4" max="4" step="0.1" value="0"><span class="val">0.0</span></div>
+    <div class="slider-row"><label>bias b</label><input type="range" min="-4" max="4" step="0.1" value="0"><span class="val">0.0</span></div>
+    <div class="stat"><span class="mono" id="nf"></span><span class="mono" id="nl"></span></div><div class="fb"></div>`;
+  const cv=mount.querySelector("canvas"),ctx=cv.getContext("2d");
+  const [sw,sb]=mount.querySelectorAll("input");
+  const [vw,vb]=mount.querySelectorAll(".val");
+  const nf=mount.querySelector("#nf"),nl=mount.querySelector("#nl"),fb=mount.querySelector(".fb");
+  const X=x=>((x+2)/4.5)*480, Y=y=>230-((y+3)/9)*230;
+  function draw(){
+    const w=+sw.value,b=+sb.value;
+    vw.textContent=w.toFixed(1);vb.textContent=b.toFixed(1);
+    const loss=PTS.reduce((a,[x,y])=>a+(w*x+b-y)**2,0)/PTS.length;
+    ctx.clearRect(0,0,480,230);
+    ctx.strokeStyle="#22304f";ctx.beginPath();ctx.moveTo(X(-2),Y(0));ctx.lineTo(X(2.5),Y(0));ctx.moveTo(X(0),Y(-3));ctx.lineTo(X(0),Y(6));ctx.stroke();
+    ctx.strokeStyle=loss<.05?"#4ade9b":"#ffc247";ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.moveTo(X(-2),Y(w*-2+b));ctx.lineTo(X(2.5),Y(w*2.5+b));ctx.stroke();ctx.lineWidth=1;
+    PTS.forEach(([x,y])=>{ctx.fillStyle="#4fd8eb";ctx.beginPath();ctx.arc(X(x),Y(y),4.5,0,7);ctx.fill();});
+    nf.textContent=`y = ${w.toFixed(1)}x ${b>=0?"+":"−"} ${Math.abs(b).toFixed(1)}`;
+    nl.textContent="loss = "+loss.toFixed(3); nl.style.color=loss<.05?"var(--emerald)":"var(--rose)";
+    if(loss<.05){fb.className="fb good";fb.textContent="✓ Converged below 0.050! Your hands just did what backprop + SGD automate.";state.labPassed[wi]=true;}
+    else fb.textContent="";
+  }
+  sw.oninput=sb.oninput=draw; draw();
+};
+
+/* Week 4: temperature lab */
+LABS.temp=(mount,wi)=>{
+  const TOKS=[["Paris",6],["France",3.2],["located",2.1],["the",1.4],["beautiful",.6]];
+  mount.innerHTML=`<div style="font-size:12px;color:var(--dim);margin-bottom:10px" class="mono">"The capital of France is" → next token:</div>
+    <div class="bars"></div>
+    <div class="slider-row"><label>temperature</label><input type="range" min="0.05" max="2" step="0.05" value="1"><span class="val">1.00</span></div>
+    <div class="fb"></div>`;
+  const bars=mount.querySelector(".bars"),sl=mount.querySelector("input"),val=mount.querySelector(".val"),fb=mount.querySelector(".fb");
+  const rows=TOKS.map(([t],i)=>{
+    const r=document.createElement("div");r.className="bar-row"+(i===0?" top":"");
+    r.innerHTML=`<span class="tok mono">${t}</span><div class="bar-track"><div class="bar-fill"></div></div><span class="pct mono"></span>`;
+    bars.appendChild(r);return r;
+  });
+  function draw(){
+    const T=Math.max(+sl.value,.01); val.textContent=T.toFixed(2);
+    const e=TOKS.map(([,l])=>Math.exp(l/T)),s=e.reduce((a,b)=>a+b,0),p=e.map(x=>x/s);
+    rows.forEach((r,i)=>{r.querySelector(".bar-fill").style.width=Math.max(p[i]*100,.5)+"%";r.querySelector(".pct").textContent=(p[i]*100).toFixed(1)+"%";});
+    if(p[0]>.99){fb.className="fb good";fb.textContent="✓ Deterministic! This is your setting for code, JSON extraction, anything repeatable.";state.labPassed[wi]=true;}
+    else fb.textContent="";
+  }
+  sl.oninput=draw; draw();
+};
+
+/* Week 5: RAG pipeline order */
+LABS.rag=(mount,wi)=>{
+  const STEPS=["Split documents into chunks & embed each one","Store the vectors in a vector database",
+    "Embed the user's question with the same model","Retrieve most-similar chunks by vector distance",
+    "Send chunks + question to the LLM for the answer"];
+  let pool=STEPS.map((s,i)=>({s,i})).sort(()=>Math.random()-.5), seq=[];
+  const seqEl=document.createElement("div");seqEl.className="seq";
+  const chipsEl=document.createElement("div");chipsEl.className="chips";
+  const row=document.createElement("div");row.style.cssText="display:flex;gap:8px";
+  const chk=document.createElement("button");chk.className="btn";chk.textContent="Check pipeline";
+  const rst=document.createElement("button");rst.className="btn ghost";rst.textContent="Reset";
+  const fb=document.createElement("div");
+  row.appendChild(chk);row.appendChild(rst);
+  function draw(){
+    seqEl.innerHTML=seq.length?"":"<div style='font-size:12px;color:#5a6683;padding:4px 6px'>Tap the stages below in run order…</div>";
+    seq.forEach((it,idx)=>{const d=document.createElement("div");d.className="step";d.innerHTML=`<span class="i mono">${idx+1}</span>${it.s}`;seqEl.appendChild(d);});
+    chipsEl.innerHTML="";
+    pool.forEach(it=>{const b=document.createElement("button");b.className="chip";b.textContent=it.s;
+      b.onclick=()=>{pool=pool.filter(p=>p!==it);seq.push(it);fb.textContent="";draw();};chipsEl.appendChild(b);});
+    chk.disabled=pool.length>0;
+  }
+  chk.onclick=()=>{
+    if(seq.every((it,idx)=>it.i===idx)){fb.className="fb good";fb.textContent="✓ That's a production RAG architecture. Now go build it for real — it's this week's homework.";state.labPassed[wi]=true;}
+    else{fb.className="fb bad";fb.textContent="✗ Something runs out of order. Hint: everything offline first, then the question's journey.";}
+  };
+  rst.onclick=()=>{pool=STEPS.map((s,i)=>({s,i})).sort(()=>Math.random()-.5);seq=[];fb.textContent="";draw();};
+  mount.appendChild(seqEl);mount.appendChild(chipsEl);mount.appendChild(row);mount.appendChild(fb);
+  draw();
+};
+
+/* Week 6: boss = checks are the boss; lab shows the capstone map */
+LABS.boss=(mount)=>{
+  mount.innerHTML=`<div style="font-size:13px;line-height:1.7;color:#c3cde2">
+    Your final boss is the check-in below — three real interview questions.<br><br>
+    <b style="color:var(--gold)">Capstone tracker (do these in the real world):</b>
+    <div class="seq" style="margin-top:10px">
+      ${["Whisper transcription running on a sample clip","Language ID per segment (fasttext / embeddings)","Switch detection + timestamps","Demo video recorded","README with eval numbers pushed"]
+        .map((s,i)=>`<div class="step"><span class="i mono">${i+1}</span>${s}</div>`).join("")}
+    </div></div>`;
+};
+</script>
+</body>
+</html>
